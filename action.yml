@@ -1,0 +1,5 @@
+name: flux PR validator
+description: validate PR commits
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
