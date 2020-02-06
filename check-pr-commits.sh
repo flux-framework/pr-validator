@@ -12,7 +12,7 @@ set -e
 set -o pipefail
 
 HEAD="HEAD"
-BASE="origin/master"
+BASE=${1:-"origin/master"}
 
 RESULT=0
 LOG=()
@@ -20,6 +20,7 @@ LOG=()
 # ok, not ok unicode symbols:
 OK='\u2714'
 NOK='\u2718'
+WARN='\u26A0'
 
 #############################################################################
 #  error log and output functions:
@@ -33,10 +34,12 @@ if test -n "$color"; then
     log()   { LOG+=("${color_warn}$*${color_reset}"); }
     ok()    { printf "${color_pass}${OK}${color_reset}"; }
     notok() { printf "${color_fail}${NOK}${color_reset}"; }
+    warn()  { printf "${color_warn}${WARN}${color_reset}"; }
 else
     log()   { LOG+=("$*"); }
     ok()    { printf "${OK}";  }
     notok() { printf "${NOK}"; }
+    warn()  { printf "${WARN}"; }
 fi
 
 dump_log() {
@@ -72,6 +75,33 @@ is_fixup_commit() {
     return 1
 }
 
+#  Return zero if commit subject length is > N characters
+subject_length_exceeds() {
+    local max=$1
+    local sha=$2
+    local len=$(git show -s --format=%s $sha | wc -c)
+    if test $len -gt $max; then
+        log "$sha has a subject longer than $max characters"
+        return 0
+    fi
+    return 1
+}
+
+#  Return zero if commit body line length is > N characters
+body_line_length_exceeds() {
+    local max=$1
+    local sha=$2
+    local count=0
+    local rc=1
+    git show -s --format=%b | while read line; do
+       if test ${#line} -gt $max; then
+           log "${sha} commit body line ${count} ${#line} characters long"
+           rc=0
+       fi
+    done
+    return $rc
+}
+
 #  Add more test functions here...
 
 #############################################################################
@@ -82,10 +112,18 @@ check_commit() {
     subject=$(git show -s --format=%s $sha)
     symbol="$(ok)"
     result=0
+
+    # First check for errors:
     if is_fixup_commit $sha || \
-       is_merge_commit $sha; then
+       is_merge_commit $sha || \
+       subject_length_exceeds 70 $sha || \
+       body_line_length_exceeds 78 $sha; then
         symbol="$(notok)"
         result=1
+    elif \
+       subject_length_exceeds 50 $sha || \
+       body_line_length_exceeds 72 $sha; then
+        symbol="$(warn)"
     fi
     printf " ${symbol} ${sha} ${subject}\n"
     return $result
