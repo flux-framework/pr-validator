@@ -15,7 +15,8 @@ HEAD="HEAD"
 BASE=${1:-"origin/master"}
 
 RESULT=0
-LOG=()
+ERRORS=()
+WARNINGS=()
 
 # ok, not ok unicode symbols:
 OK='\u2714'
@@ -23,30 +24,47 @@ NOK='\u2718'
 WARN='\u26A0'
 
 #############################################################################
-#  error log and output functions:
+#  error/warning log and output functions:
 
 color=t
+loglevel="error"
 if test -n "$color"; then
     color_fail='\e[1m\e[31m' # bold red
     color_pass='\e[1m\e[32m' # bold green
     color_warn='\e[1m\e[33m' # bold yellow
-    color_reset='\e[0m' # bold green
-    log()   { LOG+=("${color_warn}$*${color_reset}"); }
-    ok()    { printf "${color_pass}${OK}${color_reset}"; }
-    notok() { printf "${color_fail}${NOK}${color_reset}"; }
-    warn()  { printf "${color_warn}${WARN}${color_reset}"; }
+    color_reset='\e[0m'
 else
-    log()   { LOG+=("$*"); }
-    ok()    { printf "${OK}";  }
-    notok() { printf "${NOK}"; }
-    warn()  { printf "${WARN}"; }
+    color_fail=''
+    color_pass=''
+    color_warn=''
+    color_reset=''
 fi
+ok()      { printf "${color_pass}${OK}${color_reset}"; }
+notok()   { printf "${color_fail}${NOK}${color_reset}"; }
+warning() { printf "${color_warn}${WARN}${color_reset}"; }
 
-dump_log() {
+log() {
+    if test "$loglevel" = "error"; then
+        ERRORS+=("${color_fail}$*${color_reset}")
+    else
+        WARNINGS+=("${color_warn}$*${color_reset}")
+    fi
+}
+
+dump_errors() {
     printf "\nCommit message validation failed::\n"
-    for line in "${LOG[@]}"; do
+    for line in "${ERRORS[@]}"; do
         printf " $line\n"
     done
+}
+
+dump_warnings() {
+    if test ${#WARNINGS} -gt 0; then
+        printf "\nCommit warnings::\n"
+        for line in "${WARNINGS[@]}"; do
+            printf " $line\n"
+        done
+    fi
 }
 
 #############################################################################
@@ -120,10 +138,13 @@ check_commit() {
        body_line_length_exceeds 78 $sha; then
         symbol="$(notok)"
         result=1
-    elif \
-       subject_length_exceeds 50 $sha || \
-       body_line_length_exceeds 72 $sha; then
-        symbol="$(warn)"
+    else
+        # No errors, check warnings:
+        loglevel="warn"
+        if subject_length_exceeds 50 $sha || \
+           body_line_length_exceeds 72 $sha; then
+            symbol="$(warning)"
+        fi
     fi
     printf " ${symbol} ${sha} ${subject}\n"
     return $result
@@ -142,6 +163,8 @@ for sha in $COMMITS; do
 done
 
 [ $RESULT = 1 ] && dump_log
+
+dump_warnings
 
 exit $RESULT
 
