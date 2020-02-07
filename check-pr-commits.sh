@@ -12,38 +12,59 @@ set -e
 set -o pipefail
 
 HEAD="HEAD"
-BASE="origin/master"
+BASE=${1:-"origin/master"}
 
 RESULT=0
-LOG=()
+ERRORS=()
+WARNINGS=()
 
 # ok, not ok unicode symbols:
 OK='\u2714'
 NOK='\u2718'
+WARN='\u26A0'
 
 #############################################################################
-#  error log and output functions:
+#  error/warning log and output functions:
 
 color=t
+loglevel="error"
 if test -n "$color"; then
     color_fail='\e[1m\e[31m' # bold red
     color_pass='\e[1m\e[32m' # bold green
     color_warn='\e[1m\e[33m' # bold yellow
-    color_reset='\e[0m' # bold green
-    log()   { LOG+=("${color_warn}$*${color_reset}"); }
-    ok()    { printf "${color_pass}${OK}${color_reset}"; }
-    notok() { printf "${color_fail}${NOK}${color_reset}"; }
+    color_reset='\e[0m'
 else
-    log()   { LOG+=("$*"); }
-    ok()    { printf "${OK}";  }
-    notok() { printf "${NOK}"; }
+    color_fail=''
+    color_pass=''
+    color_warn=''
+    color_reset=''
 fi
+ok()      { printf "${color_pass}${OK}${color_reset}"; }
+notok()   { printf "${color_fail}${NOK}${color_reset}"; }
+warning() { printf "${color_warn}${WARN}${color_reset}"; }
 
-dump_log() {
+log() {
+    if test "$loglevel" = "error"; then
+        ERRORS+=("${color_fail}$*${color_reset}")
+    else
+        WARNINGS+=("${color_warn}$*${color_reset}")
+    fi
+}
+
+dump_errors() {
     printf "\nCommit message validation failed::\n"
-    for line in "${LOG[@]}"; do
+    for line in "${ERRORS[@]}"; do
         printf " $line\n"
     done
+}
+
+dump_warnings() {
+    if test ${#WARNINGS} -gt 0; then
+        printf "\nCommit warnings::\n"
+        for line in "${WARNINGS[@]}"; do
+            printf " $line\n"
+        done
+    fi
 }
 
 #############################################################################
@@ -72,6 +93,33 @@ is_fixup_commit() {
     return 1
 }
 
+#  Return zero if commit subject length is > N characters
+subject_length_exceeds() {
+    local max=$1
+    local sha=$2
+    local len=$(git show -s --format=%s $sha | wc -c)
+    if test $len -gt $max; then
+        log "$sha has a subject longer than $max characters"
+        return 0
+    fi
+    return 1
+}
+
+#  Return zero if commit body line length is > N characters
+body_line_length_exceeds() {
+    local max=$1
+    local sha=$2
+    local count=0
+    local rc=1
+    git show -s --format=%b | while read line; do
+       if test ${#line} -gt $max; then
+           log "${sha} commit body line ${count} ${#line} characters long"
+           rc=0
+       fi
+    done
+    return $rc
+}
+
 #  Add more test functions here...
 
 #############################################################################
@@ -82,10 +130,21 @@ check_commit() {
     subject=$(git show -s --format=%s $sha)
     symbol="$(ok)"
     result=0
+
+    # First check for errors:
     if is_fixup_commit $sha || \
-       is_merge_commit $sha; then
+       is_merge_commit $sha || \
+       subject_length_exceeds 70 $sha || \
+       body_line_length_exceeds 78 $sha; then
         symbol="$(notok)"
         result=1
+    else
+        # No errors, check warnings:
+        loglevel="warn"
+        if subject_length_exceeds 50 $sha || \
+           body_line_length_exceeds 72 $sha; then
+            symbol="$(warning)"
+        fi
     fi
     printf " ${symbol} ${sha} ${subject}\n"
     return $result
@@ -104,6 +163,8 @@ for sha in $COMMITS; do
 done
 
 [ $RESULT = 1 ] && dump_log
+
+dump_warnings
 
 exit $RESULT
 
