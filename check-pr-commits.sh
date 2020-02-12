@@ -162,7 +162,7 @@ for sha in $COMMITS; do
     fi
 done
 
-[ $RESULT = 1 ] && dump_log
+[ $RESULT = 1 ] && dump_errors
 
 dump_warnings
 
