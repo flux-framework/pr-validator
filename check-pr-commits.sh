@@ -3,7 +3,7 @@
 #  Simple PR commit validator.
 #
 #  Exit with nonzero status if any PR commits (commits between the current
-#   branch and origin/master do not validate, e.g. are themselves merge
+#   branch and origin/main do not validate, e.g. are themselves merge
 #   commits, or have the word "fixup" or "squash" in the commit subect, etc.
 #
 #  Usage: check-pr-commits.sh [upstream ref]
@@ -11,8 +11,14 @@
 set -e
 set -o pipefail
 
+origin_main() {
+    git rev-parse --verify origin/main >/dev/null 2>&1 \
+    && echo origin/main \
+    || echo origin/master
+}
+
 HEAD="HEAD"
-BASE=${1:-"origin/master"}
+BASE=${1:-$(origin_main)}
 
 RESULT=0
 ERRORS=()
