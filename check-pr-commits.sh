@@ -126,6 +126,16 @@ body_line_length_exceeds() {
     return $rc
 }
 
+#  Return zero if commit body is empty
+body_is_empty() {
+    nlines=$(git show -s --format=%b | wc -l)
+    if test $nlines -le 1; then
+        log "$sha has empty commit body"
+        return 0
+    fi
+    return 1
+}
+
 #  Add more test functions here...
 
 #############################################################################
@@ -141,6 +151,7 @@ check_commit() {
     if is_fixup_commit $sha || \
        is_merge_commit $sha || \
        subject_length_exceeds 70 $sha || \
+       body_is_empty $sha || \
        body_line_length_exceeds 78 $sha; then
         symbol="$(notok)"
         result=1
