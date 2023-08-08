@@ -128,7 +128,8 @@ body_line_length_exceeds() {
 
 #  Return zero if commit body is empty
 body_is_empty() {
-    nlines=$(git show -s --format=%b | wc -l)
+    sha=$1
+    nlines=$(git show -s --format=%b $sha | wc -l)
     if test $nlines -le 1; then
         log "$sha has empty commit body"
         return 0
