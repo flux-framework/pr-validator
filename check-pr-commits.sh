@@ -3,8 +3,9 @@
 #  Simple PR commit validator.
 #
 #  Exit with nonzero status if any PR commits (commits between the current
-#   branch and origin/main do not validate, e.g. are themselves merge
-#   commits, or have the word "fixup" or "squash" in the commit subect, etc.
+#   branch and origin/main do not validate, e.g. are themselves non-subtree
+#   merge commits, or have the word "fixup" or "squash" in the commit subect,
+#   etc.
 #
 #  Usage: check-pr-commits.sh [upstream ref]
 #
@@ -81,10 +82,17 @@ is_only_child() {
     return $(git rev-list --no-walk --count --merges "$@")
 }
 
+is_subtree_merge() {
+    if git show -s --format=%s $1 | grep -q '^Merge commit .* as .*'; then
+        return 0
+    fi
+    return 1
+}
+
 #  Return zero if commit is a merge commit (more than one parent)
 is_merge_commit() {
-    if ! is_only_child $1; then
-        log "$1 appears to be a merge commit"
+    if ! is_only_child $1 && ! is_subtree_merge $1; then
+        log "$1 appears to be a non-subtree merge commit"
         return 0
     fi
     return 1
@@ -103,6 +111,10 @@ is_fixup_commit() {
 subject_length_exceeds() {
     local max=$1
     local sha=$2
+
+    # Skip for subtree merge commits:
+    is_subtree_merge $sha && return 1
+
     local len=$(git show -s --format=%s $sha | wc -c)
     if test $len -gt $max; then
         log "$sha has a subject longer than $max characters"
@@ -117,6 +129,10 @@ body_line_length_exceeds() {
     local sha=$2
     local count=0
     local rc=1
+
+    # Skip for subtree merge commits:
+    is_subtree_merge $sha && return 1
+
     git show -s --format=%b | while read line; do
        if test ${#line} -gt $max; then
            log "${sha} commit body line ${count} ${#line} characters long"
@@ -129,6 +145,10 @@ body_line_length_exceeds() {
 #  Return zero if commit body is empty
 body_is_empty() {
     sha=$1
+
+    # Skip for subtree merge commits:
+    is_subtree_merge $sha && return 1
+
     nlines=$(git show -s --format=%b $sha | wc -l)
     if test $nlines -le 1; then
         log "$sha has empty commit body"
