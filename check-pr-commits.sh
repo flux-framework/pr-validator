@@ -157,6 +157,19 @@ body_is_empty() {
     return 1
 }
 
+#  Run typos check on PR commit messages
+has_typos() {
+    sha=$1
+    message=$(git show -s --format=%B $sha)
+    commit_misspellings=$(echo ${message} | typos --diff - | wc -l)
+    if test ${commit_misspellings} -ne 0; then
+        # if typos exist, show them and return 0
+        log "$(echo ${message} | typos -)"
+        return 0
+    fi
+    return 1
+}
+
 #  Add more test functions here...
 
 #############################################################################
@@ -173,7 +186,8 @@ check_commit() {
        is_merge_commit $sha || \
        subject_length_exceeds 70 $sha || \
        body_is_empty $sha || \
-       body_line_length_exceeds 78 $sha; then
+       body_line_length_exceeds 78 $sha || \
+       has_typos $sha; then
         symbol="$(notok)"
         result=1
     else
