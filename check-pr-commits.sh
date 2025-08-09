@@ -206,6 +206,9 @@ check_commit() {
 #  Main loop:
 
 printf "Validating commits on current branch:\n"
+if git status 2>&1 >/dev/null  | grep -q "dubious ownership" || true; then
+    git config --global --add safe.directory $(pwd)
+fi
 
 COMMITS=$(git log --format=%h ${BASE}..${HEAD})
 for sha in $COMMITS; do
