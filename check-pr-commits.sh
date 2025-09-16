@@ -12,6 +12,11 @@
 set -e
 set -o pipefail
 
+# Fix "dubious ownership" error if necessary before first git command:
+if git status 2>&1 >/dev/null  | grep -q "dubious ownership" || true; then
+    git config --global --add safe.directory $(pwd)
+fi
+
 origin_main() {
     git rev-parse --verify origin/main >/dev/null 2>&1 \
     && echo origin/main \
@@ -206,9 +211,6 @@ check_commit() {
 #  Main loop:
 
 printf "Validating commits on current branch:\n"
-if git status 2>&1 >/dev/null  | grep -q "dubious ownership" || true; then
-    git config --global --add safe.directory $(pwd)
-fi
 
 COMMITS=$(git log --format=%h ${BASE}..${HEAD})
 for sha in $COMMITS; do
